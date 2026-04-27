@@ -1,4 +1,5 @@
 import { Page, APIRequestContext, APIResponse } from '@playwright/test';
+import { ApiRetryOptions } from '../types/retry.types';
 
 export type ApiContext = Page | APIRequestContext;
 export type HttpMethod = 'GET' | 'POST' | 'PUT' | 'DELETE' | 'PATCH';
@@ -10,12 +11,6 @@ export interface ApiRequestOptions {
     data?: unknown;
     params?: Record<string, string>;
     timeout?: number;
-}
-
-export interface RetryOptions {
-    condition: (response: APIResponse) => Promise<boolean> | boolean;
-    pollingInterval?: number;
-    retryCount?: number;
 }
 
 export class ApiHelper {
@@ -69,27 +64,25 @@ export class ApiHelper {
     }
 
     /**
-     * Call API with retry logic
+     * Call API with retry logic.
+     * Uses ApiRetryOptions from src/types/retry.types.ts (condition-based success detection).
      */
     async callApiWithRetry(
         options: ApiRequestOptions,
-        retryOptions: RetryOptions,
+        retryOptions: ApiRetryOptions,
     ): Promise<APIResponse> {
         const { condition, pollingInterval = 5000, retryCount = 3 } = retryOptions;
         let lastResponse: APIResponse | null = null;
 
         for (let attempt = 1; attempt <= retryCount; attempt++) {
             lastResponse = await this.callApi(options);
-
             if (await condition(lastResponse)) {
                 return lastResponse;
             }
-
             if (attempt < retryCount) {
                 await new Promise(resolve => setTimeout(resolve, pollingInterval));
             }
         }
-
         return lastResponse!;
     }
 
@@ -103,14 +96,14 @@ export class ApiHelper {
     /**
      * Convenience method for POST requests
      */
-    async post(url: string, data?: unknown, options?: Omit<ApiRequestOptions, 'url' | 'method' | 'data'>): Promise<APIResponse> {
+    async post(url: string, data?: unknown, options?: Omit<ApiRequestOptions, 'url' | 'method'>): Promise<APIResponse> {
         return this.callApi({ url, method: 'POST', data, ...options });
     }
 
     /**
      * Convenience method for PUT requests
      */
-    async put(url: string, data?: unknown, options?: Omit<ApiRequestOptions, 'url' | 'method' | 'data'>): Promise<APIResponse> {
+    async put(url: string, data?: unknown, options?: Omit<ApiRequestOptions, 'url' | 'method'>): Promise<APIResponse> {
         return this.callApi({ url, method: 'PUT', data, ...options });
     }
 
@@ -124,7 +117,7 @@ export class ApiHelper {
     /**
      * Convenience method for PATCH requests
      */
-    async patch(url: string, data?: unknown, options?: Omit<ApiRequestOptions, 'url' | 'method' | 'data'>): Promise<APIResponse> {
+    async patch(url: string, data?: unknown, options?: Omit<ApiRequestOptions, 'url' | 'method'>): Promise<APIResponse> {
         return this.callApi({ url, method: 'PATCH', data, ...options });
     }
 
@@ -143,4 +136,3 @@ export class ApiHelper {
         return status >= 200 && status < 300;
     }
 }
-

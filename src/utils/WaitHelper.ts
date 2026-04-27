@@ -1,14 +1,10 @@
 import { Page, Locator } from '@playwright/test';
+import { UiRetryOptions } from '../types/retry.types';
 
 export interface WaitOptions {
     timeout?: number;
     interval?: number;
     message?: string;
-}
-
-export interface RetryOptions {
-    retries?: number;
-    delay?: number;
 }
 
 export class WaitHelper {
@@ -99,13 +95,14 @@ export class WaitHelper {
     }
 
     /**
-     * Retry an action with delay between attempts
+     * Retry an action with delay between attempts.
+     * Uses UiRetryOptions from src/types/retry.types.ts (exception-based success detection).
      */
-    async retry<T>(action: () => Promise<T>, options?: RetryOptions): Promise<T> {
+    async retry<T>(action: () => Promise<T>, options?: UiRetryOptions): Promise<T> {
         const retries = options?.retries || 3;
         const delay = options?.delay || 1000;
-
         let lastError: Error | undefined;
+
         for (let i = 0; i < retries; i++) {
             try {
                 return await action();
@@ -125,19 +122,20 @@ export class WaitHelper {
     async waitForElementStable(locator: Locator, options?: WaitOptions): Promise<void> {
         const timeout = options?.timeout || this.defaultTimeout;
         const interval = options?.interval || 100;
-
         let lastBox = await locator.boundingBox();
         const startTime = Date.now();
 
         while (Date.now() - startTime < timeout) {
             await this.page.waitForTimeout(interval);
             const currentBox = await locator.boundingBox();
-            
-            if (lastBox && currentBox &&
+            if (
+                lastBox &&
+                currentBox &&
                 lastBox.x === currentBox.x &&
                 lastBox.y === currentBox.y &&
                 lastBox.width === currentBox.width &&
-                lastBox.height === currentBox.height) {
+                lastBox.height === currentBox.height
+            ) {
                 return;
             }
             lastBox = currentBox;
@@ -145,4 +143,3 @@ export class WaitHelper {
         throw new Error(`Timeout: Element not stable after ${timeout}ms`);
     }
 }
-
