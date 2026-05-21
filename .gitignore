@@ -26,7 +26,15 @@ Thumbs.db
 # Logs
 *.log
 npm-debug.log*
+logs/
 
 # Coverage
 coverage/
+
+# Allure
+allure-results/
+allure-report/
+
+# Custom TTA reporter output
+tta-report/
 

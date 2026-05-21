@@ -1,0 +1,139 @@
+name: TTACart E2E
+
+on:
+  push:
+    branches:
+      - ttacart
+  pull_request:
+    branches:
+      - main
+      - ttacart
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: ttacart-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: shard ${{ matrix.shard }}/4
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3, 4]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Install Playwright browsers
+        run: npx playwright install --with-deps
+
+      - name: Run TTACart suite (shard ${{ matrix.shard }}/4)
+        env:
+          TTA_ENV: qa
+          CI: 'true'
+        run: npx playwright test src/tests/ttacart --shard=${{ matrix.shard }}/4
+
+      - name: Upload Playwright HTML report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report-shard-${{ matrix.shard }}
+          path: playwright-report/
+          retention-days: 14
+
+      - name: Upload raw test-results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results-shard-${{ matrix.shard }}
+          path: test-results/
+          retention-days: 14
+
+      - name: Upload Allure results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: allure-results-shard-${{ matrix.shard }}
+          path: allure-results/
+          retention-days: 14
+
+  merge-reports:
+    name: Merge reports
+    if: always()
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - run: npm ci
+
+      - name: Download all Playwright HTML shards
+        uses: actions/download-artifact@v4
+        with:
+          pattern: playwright-report-shard-*
+          path: all-blob-reports
+          merge-multiple: false
+
+      - name: Merge into a single HTML report
+        run: |
+          mkdir -p merged-html-report
+          npx playwright merge-reports --reporter html ./all-blob-reports || true
+
+      - name: Download all Allure shards
+        uses: actions/download-artifact@v4
+        with:
+          pattern: allure-results-shard-*
+          path: merged-allure-input
+          merge-multiple: true
+
+      - name: Upload merged HTML report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report-merged
+          path: playwright-report/
+          retention-days: 30
+
+      - name: Upload merged Allure input
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: allure-results-merged
+          path: merged-allure-input/
+          retention-days: 30
+
+      - name: Setup Pages
+        if: github.ref == 'refs/heads/ttacart'
+        uses: actions/configure-pages@v5
+        continue-on-error: true
+
+      - name: Upload Pages artifact
+        if: github.ref == 'refs/heads/ttacart'
+        uses: actions/upload-pages-artifact@v3
+        continue-on-error: true
+        with:
+          path: playwright-report
+
+      - name: Deploy to GitHub Pages
+        if: github.ref == 'refs/heads/ttacart'
+        uses: actions/deploy-pages@v4
+        continue-on-error: true
